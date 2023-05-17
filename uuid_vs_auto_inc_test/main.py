@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 from collections import defaultdict
 
 NUM_RUNS = 5
-NUM_ITERATIONS = 1000
+NUM_ITERATIONS = 10000
 
 AUTO_INC_TABLE_NAME = "test_auto_inc"
 UUID_TABLE_NAME = "test_uuid"
