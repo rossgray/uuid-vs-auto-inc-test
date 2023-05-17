@@ -1,7 +1,9 @@
 import time
 from sqlalchemy import create_engine, text
+from collections import defaultdict
 
-NUM_ITERATIONS = 10_000
+NUM_RUNS = 5
+NUM_ITERATIONS = 1000
 
 AUTO_INC_TABLE_NAME = "test_auto_inc"
 UUID_TABLE_NAME = "test_uuid"
@@ -41,12 +43,6 @@ def create_tables(conn):
     conn.execute(text(CREATE_TABLE_UUID_SQL))
     conn.execute(text(CREATE_TABLE_UUID_STR_SQL))
 
-    # ensure both tables are empty in case they have data from a previous run
-    conn.execute(text(f"DELETE FROM {AUTO_INC_TABLE_NAME}"))
-    conn.execute(text(f"DELETE FROM {UUID_TABLE_NAME}"))
-    conn.execute(text(f"DELETE FROM {UUID_STR_TABLE_NAME}"))
-    conn.commit()
-
 
 def _insert_into_table(conn, table_name, num_iterations):
     start = time.perf_counter()
@@ -68,6 +64,9 @@ def insert_into_table(conn, table_name):
     populated table vs an empty table (e.g. if it takes a while for the indexes
     to be built)
     """
+    # ensure table is empty in case it has data from a previous run
+    conn.execute(text(f"DELETE FROM {table_name}"))
+    conn.commit()
     time_taken = _insert_into_table(conn, table_name, NUM_ITERATIONS // 2)
     time.sleep(1)
     time_taken += _insert_into_table(conn, table_name, NUM_ITERATIONS // 2)
@@ -75,7 +74,7 @@ def insert_into_table(conn, table_name):
     # check number of entries
     result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
     assert result.fetchone()[0] == NUM_ITERATIONS
-    print(f"Inserted {NUM_ITERATIONS} rows into {table_name} in {time_taken:.2f}s")
+    # print(f"Inserted {NUM_ITERATIONS} rows into {table_name} in {time_taken:.2f}s")
     return time_taken
 
 
@@ -94,19 +93,39 @@ def select_from_table(conn, table_name):
         assert result.fetchone()
     end = time.perf_counter()
     time_taken = end - start
-    print(f"Selected {NUM_ITERATIONS} rows from {table_name} in {time_taken:.2f}s")
+    # print(f"Selected {NUM_ITERATIONS} rows from {table_name} in {time_taken:.2f}s")
     return time_taken
 
 
 def main():
+    totals = dict(inserts=defaultdict(float), selects=defaultdict(float))
     with engine.connect() as conn:
         create_tables(conn)
-        time_insert_auto_inc = insert_into_table(conn, AUTO_INC_TABLE_NAME)
-        time_insert_uuid = insert_into_table(conn, UUID_TABLE_NAME)
-        time_insert_uuid_str = insert_into_table(conn, UUID_STR_TABLE_NAME)
-        time_select_auto_inc = select_from_table(conn, AUTO_INC_TABLE_NAME)
-        time_select_uuid = select_from_table(conn, UUID_TABLE_NAME)
-        time_select_uuid_str = select_from_table(conn, UUID_STR_TABLE_NAME)
+        for _ in range(NUM_RUNS):
+            totals["inserts"]["auto_inc"] += insert_into_table(
+                conn, AUTO_INC_TABLE_NAME
+            )
+            totals["inserts"]["uuid"] += insert_into_table(conn, UUID_TABLE_NAME)
+            totals["inserts"]["uuid_str"] += insert_into_table(
+                conn, UUID_STR_TABLE_NAME
+            )
+
+            totals["selects"]["auto_inc"] += select_from_table(
+                conn, AUTO_INC_TABLE_NAME
+            )
+            totals["selects"]["uuid"] += select_from_table(conn, UUID_TABLE_NAME)
+            totals["selects"]["uuid_str"] += select_from_table(
+                conn, UUID_STR_TABLE_NAME
+            )
+
+    for pk_type, total_time in totals["inserts"].items():
+        print(
+            f"Inserting {NUM_ITERATIONS} rows using {pk_type} took on average {total_time / NUM_RUNS:.2f}s"
+        )
+    for pk_type, total_time in totals["selects"].items():
+        print(
+            f"Selecting {NUM_ITERATIONS} rows using {pk_type} took on average {total_time / NUM_RUNS:.2f}s"
+        )
 
 
 if __name__ == "__main__":
