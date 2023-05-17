@@ -6,6 +6,7 @@ db:
 	@sleep 10
 
 run: db
+	@poetry install
 	@echo "Running test..."
 	@poetry run python -m uuid_vs_auto_inc_test.main
 	@echo "Stopping docker container"
