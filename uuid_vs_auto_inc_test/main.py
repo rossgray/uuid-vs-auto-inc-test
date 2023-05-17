@@ -83,6 +83,8 @@ def select_from_table(conn, table_name):
     # first, fetch all primary keys from the table
     result = conn.execute(text(f"SELECT id FROM {table_name}"))
     ids = [row.id for row in result]
+    # convert uuids to strings (seem to perform better in queries)
+    ids = [str(id) for id in ids] if not isinstance(ids[0], int) else ids
 
     start = time.perf_counter()
     for id in ids:
